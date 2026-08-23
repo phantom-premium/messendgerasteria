@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Для отправки геолокации в чате (кнопка "📍 Геолокация") -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Скачивание фото/видео из чата в галерею (Pictures/Movies) через
+         DownloadManager — нужно только на API 24-28 (до scoped storage),
+         на API 29+ запись в публичные Pictures/Movies разрешений не требует
+         и maxSdkVersion не даёт системе спрашивать его там, где оно уже не
+         нужно. См. WebAppInterface.downloadMedia(). -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <!-- Для установки обновлений приложения, которые раздаёт сам сервер
+         (без Google Play) — см. AppUpdateManager.java. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- Нужны для собственного (без Firebase) фонового push-сервиса:
+         постоянное WebSocket-соединение живёт в foreground-сервисе,
+         RECEIVE_BOOT_COMPLETED поднимает его заново после перезагрузки
+         телефона, а REQUEST_IGNORE_BATTERY_OPTIMIZATIONS позволяет
+         попросить пользователя не давать системе "замораживать" сервис в
+         фоне (см. AsteriaPushService.java, BootReceiver.java). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Чтобы уведомление о входящем звонке (CallStyle, см.
+         AsteriaPushService.showCallNotification) реально разворачивалось на
+         весь экран поверх экрана блокировки, а не просто тихо лежало
+         шторкой — иначе звонок легко пропустить, если телефон заблокирован.
+         Начиная с Android 14 система может сама отозвать это разрешение у
+         приложений, которые, по её мнению, им злоупотребляют — если это
+         случится, звонок продолжит показываться обычным (не полноэкранным)
+         уведомлением, ничего не сломается. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.Asteria"
+        android:usesCleartextTraffic="true">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Независимый push без Firebase: держит собственное постоянное
+             WebSocket-соединение с вашим сервером в foreground-сервисе,
+             показывает системные уведомления, пока приложение свёрнуто или
+             закрыто. См. AsteriaPushService.java. -->
+        <service
+            android:name=".AsteriaPushService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- Поднимает AsteriaPushService заново после перезагрузки
+             телефона — иначе уведомления не приходили бы до следующего
+             ручного открытия приложения. См. BootReceiver.java. -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Нужен, чтобы отдать скачанный APK-файл (лежит в приватном
+             кэше приложения) системному установщику пакетов через
+             content:// URI — начиная с Android 7 напрямую file:// URI
+             между приложениями передавать нельзя. См. AppUpdateManager.java
+             и res/xml/file_paths.xml. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+</manifest>
