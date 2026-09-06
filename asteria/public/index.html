@@ -1,0 +1,1150 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<title>Asteria</title>
+<!-- Раньше был эксперимент: эти два тега убирали, чтобы standalone-режим
+     определялся только по manifest.webmanifest — предполагалось, что
+     старый способ мешает вебвью дойти до низа экрана. Вернули обратно:
+     без apple-mobile-web-app-capable часть версий iOS не считает сайт
+     полноценным установленным приложением для целей Push API — уведомления
+     в фоне (для закрытого приложения) переставали приходить, хотя
+     разрешение на них выдавалось нормально. Если проблема с отступом снизу
+     всё ещё актуальна, её нужно решать через safe-area-inset в CSS, а не
+     через эти теги. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Asteria">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<!-- Загрузочный экран: показывается, пока идёт проверка сессии (checkSession),
+     чтобы у уже авторизованных пользователей не мелькал экран входа. -->
+<div id="bootScreen" class="auth-screen">
+  <div class="boot-brand">Asteria</div>
+  <div class="boot-spinner"></div>
+</div>
+
+<!-- Экран авторизации (полноэкранный, не модальное окно) -->
+<div id="authScreen" class="auth-screen hidden">
+
+  <!-- Экран 1: стартовый (выбор действия) -->
+  <div class="auth-step" id="authStepStart" data-step="start">
+    <div class="auth-brand" data-i18n="auth_brand">Asteria</div>
+    <div class="auth-start-mid">
+      <div class="auth-qr-wrap" id="authStartQrWrap"></div>
+      <!-- .auth-qr-text-group: на телефоне display:contents — обёртка "невидима"
+           для флекс-раскладки .auth-start-mid, и три блока внутри ведут себя
+           точно как раньше (просто идут по счёту после QR). На десктопе
+           обёртка становится обычной flex-колонкой, чтобы её можно было
+           поставить рядом с QR-кодом (см. media (min-width:861px) ниже). -->
+      <div class="auth-qr-text-group">
+        <div class="auth-qr-hint" data-i18n="auth_qr_hint">Отсканируйте код камерой телефона, на котором вы уже вошли в Asteria, либо в этом устройстве откройте Настройки → Устройства → «Подтвердить вход по коду» и введите код ниже.</div>
+        <div class="auth-qr-code-text" id="authStartQrCodeText"></div>
+        <div class="auth-error auth-error-center" id="authStartQrError"></div>
+      </div>
+    </div>
+    <div class="auth-start-actions">
+      <button type="button" class="auth-link" id="authGoLogin" data-i18n="auth_action_login">Войти</button>
+      <button type="button" class="auth-link" id="authGoRegister" data-i18n="auth_action_register">Зарегистрироваться</button>
+    </div>
+  </div>
+
+  <!-- Экран 2: вход — шаг 1 (логин) -->
+  <div class="auth-step hidden" id="authLoginStep1" data-step="login1">
+    <div class="auth-sub-header">
+      <button type="button" class="icon-btn auth-back-btn" id="authLoginStep1Back" aria-label="Назад">←</button>
+      <h2 data-i18n="auth_tab_login">Войти</h2>
+      <span></span>
+    </div>
+    <div class="auth-step-fields">
+      <div class="auth-emoji">🌍</div>
+      <div class="auth-prompt" data-i18n="auth_login_username_prompt">Введите логин</div>
+      <input type="text" id="loginUsername" class="auth-input" autocomplete="username" data-i18n-placeholder="auth_username_ph" placeholder="Логин">
+      <div class="auth-error" id="loginStep1Error"></div>
+    </div>
+    <button type="button" class="btn-primary auth-next" id="loginStep1Next" data-i18n="auth_next_btn">Далее</button>
+  </div>
+
+  <!-- Экран 3: вход — шаг 2 (пароль) -->
+  <div class="auth-step hidden" id="authLoginStep2" data-step="login2">
+    <div class="auth-sub-header">
+      <button type="button" class="icon-btn auth-back-btn" id="authLoginStep2Back" aria-label="Назад">←</button>
+      <h2 data-i18n="auth_tab_login">Войти</h2>
+      <span></span>
+    </div>
+    <div class="auth-step-fields">
+      <div class="auth-emoji">🙈</div>
+      <div class="auth-prompt" data-i18n="auth_login_password_prompt">Введите пароль</div>
+      <input type="password" id="loginPassword" class="auth-input" autocomplete="current-password" data-i18n-placeholder="auth_password_ph" placeholder="Пароль">
+      <div class="auth-error" id="loginStep2Error"></div>
+    </div>
+    <button type="button" class="btn-primary auth-next" id="loginStep2Next" data-i18n="auth_login_btn">Войти</button>
+  </div>
+
+  <!-- Экран 4: регистрация — шаг 1 (логин) -->
+  <div class="auth-step hidden" id="authRegStep1" data-step="reg1">
+    <div class="auth-sub-header">
+      <button type="button" class="icon-btn auth-back-btn" id="authRegStep1Back" aria-label="Назад">←</button>
+      <h2 data-i18n="auth_tab_register">Регистрация</h2>
+      <span></span>
+    </div>
+    <div class="auth-step-fields">
+      <div class="auth-emoji">😊</div>
+      <div class="auth-prompt" data-i18n="auth_reg_username_prompt">Придумайте логин</div>
+      <input type="text" id="regUsername" class="auth-input" autocomplete="username" data-i18n-placeholder="auth_username_ph" placeholder="Логин">
+      <div class="auth-error" id="regStep1Error"></div>
+    </div>
+    <button type="button" class="btn-primary auth-next" id="regStep1Next" data-i18n="auth_next_btn">Далее</button>
+  </div>
+
+  <!-- Экран 5: регистрация — шаг 2 (пароль) -->
+  <div class="auth-step hidden" id="authRegStep2" data-step="reg2">
+    <div class="auth-sub-header">
+      <button type="button" class="icon-btn auth-back-btn" id="authRegStep2Back" aria-label="Назад">←</button>
+      <h2 data-i18n="auth_tab_register">Регистрация</h2>
+      <span></span>
+    </div>
+    <div class="auth-step-fields">
+      <div class="auth-emoji">😊</div>
+      <div class="auth-prompt" data-i18n="auth_reg_password_prompt">Придумайте пароль</div>
+      <input type="password" id="regPassword" class="auth-input" autocomplete="new-password" data-i18n-placeholder="auth_register_password_ph" placeholder="Пароль (мин. 4 символа)">
+      <div class="auth-error" id="regStep2Error"></div>
+    </div>
+    <button type="button" class="btn-primary auth-next" id="regStep2Next" data-i18n="auth_next_btn">Далее</button>
+  </div>
+
+  <!-- Экран 6: регистрация — шаг 3 (имя и описание) -->
+  <div class="auth-step hidden" id="authRegStep3" data-step="reg3">
+    <div class="auth-sub-header">
+      <button type="button" class="icon-btn auth-back-btn" id="authRegStep3Back" aria-label="Назад">←</button>
+      <h2 data-i18n="auth_tab_register">Регистрация</h2>
+      <span></span>
+    </div>
+    <div class="auth-step-fields auth-step-fields-stretch">
+    <div class="auth-field-block">
+      <div class="auth-field-label" data-i18n="auth_reg_name_label">Укажите имя</div>
+      <input type="text" id="regDisplayName" class="auth-input" data-i18n-placeholder="auth_displayname_ph" placeholder="Ваше имя">
+      <div class="auth-error" id="regNameError"></div>
+    </div>
+    <div class="auth-field-block">
+      <div class="auth-field-label" data-i18n="auth_reg_bio_label">Добавьте описание</div>
+      <textarea id="regBio" class="auth-input auth-textarea" rows="3" data-i18n-placeholder="auth_reg_bio_ph" placeholder="Немного о себе (необязательно)"></textarea>
+    </div>
+    <div class="auth-error" id="regStep3Error"></div>
+    </div>
+    <button type="button" class="btn-primary auth-next" id="regStep3Submit" data-i18n="auth_register_btn">Зарегистрироваться</button>
+  </div>
+
+</div>
+
+<!-- Основное приложение -->
+<div id="appScreen" class="app-screen hidden">
+
+  <!-- Левая рельса (десктоп) -->
+  <nav class="nav-rail" id="navRail">
+    <div class="my-avatar nav-rail-avatar" id="myAvatar" title="Профиль"></div>
+    <button class="nav-rail-btn active" data-section="chats" title="Чаты"><span class="nri">💬</span><span class="nrl">Чаты</span></button>
+    <button class="nav-rail-btn" data-section="calls" title="Звонки"><span class="nri">📞</span><span class="nrl">Звонки</span></button>
+    <button class="nav-rail-btn" data-section="settings" title="Настройки"><span class="nri">⚙</span><span class="nrl">Настройки</span></button>
+    <button class="nav-rail-btn hidden" id="adminNavBtn" data-section="admin" title="Админ-панель"><span class="nri">🛡</span><span class="nrl">Админ</span></button>
+  </nav>
+
+  <div class="app-main" id="appMain">
+
+    <!-- ===== РАЗДЕЛ: ЧАТЫ ===== -->
+    <section class="app-section" id="sectionChats">
+      <div class="sidebar" id="sidebar">
+        <div class="sidebar-top">
+          <div class="sidebar-top-title-wrap">
+            <div class="sidebar-top-title">Чаты</div>
+            <div class="mini-stories" id="miniStories"></div>
+          </div>
+          <button id="newChatBtn" class="icon-btn" title="Новый чат">＋</button>
+        </div>
+
+        <div class="stories-strip" id="storiesStrip"></div>
+
+        <div class="sidebar-search">
+          <input type="text" id="chatsGlobalSearchInput" placeholder="Поиск по вашим чатам и каналам…" autocomplete="off">
+        </div>
+
+        <div id="chatsSearchResults" class="conv-list hidden"></div>
+        <div id="chatsDefaultView">
+          <div class="folder-tabs hidden" id="folderTabs"></div>
+          <div id="appUpdateBanner" class="main-banner app-update-banner hidden"></div>
+          <div id="mainBanner" class="main-banner hidden"></div>
+          <div class="conv-list" id="convList"></div>
+        </div>
+      </div>
+
+      <div class="chat-panel" id="chatPanel">
+        <div class="chat-empty" id="chatEmpty">Выберите чат слева, чтобы начать общение ✨</div>
+
+        <div class="chat-active hidden" id="chatActive">
+          <div class="chat-header">
+            <button class="icon-btn back-btn" id="backToListBtn" title="Назад">←</button>
+            <div class="chat-header-info" id="chatHeaderInfo"></div>
+            <div class="chat-header-actions">
+              <button class="icon-btn hidden" id="groupCallBtn" title="Групповой звонок">🎧</button>
+              <button class="icon-btn" id="audioCallBtn" title="Аудиозвонок">📞</button>
+              <button class="icon-btn" id="videoCallBtn" title="Видеозвонок">🎥</button>
+            </div>
+          </div>
+          <div class="pinned-message-bar hidden" id="pinnedMessageBar">
+            <span class="pinned-message-icon">📌</span>
+            <div class="pinned-message-text" id="pinnedMessageText"></div>
+            <button class="icon-btn" id="unpinMessageBtn" title="Открепить">✕</button>
+          </div>
+          <div class="chat-fog chat-fog-top" aria-hidden="true"></div>
+          <div class="messages" id="messages"></div>
+          <div class="chat-fog chat-fog-bottom" aria-hidden="true"></div>
+          <button class="scroll-to-bottom-btn hidden" id="scrollToBottomBtn" title="К концу переписки" aria-label="К концу переписки">↓</button>
+          <div class="typing-indicator hidden" id="typingIndicator">печатает…</div>
+
+          <div class="channel-subscribed-bar hidden" id="channelSubscribedBar">
+            <span>✓ Вы подписаны на этот канал</span>
+            <button class="btn-secondary" id="unsubscribeFromBarBtn">Отписаться</button>
+          </div>
+
+          <div class="bot-start-bar hidden" id="botStartBar">
+            <button class="btn-primary bot-start-btn" id="botStartBtn">Начать</button>
+          </div>
+
+          <div class="reply-preview-bar hidden" id="replyPreviewBar">
+            <div class="reply-preview-info">
+              <div class="reply-preview-label" id="replyPreviewLabel">Ответ</div>
+              <div class="reply-preview-text" id="replyPreviewText"></div>
+            </div>
+            <button class="icon-btn" id="cancelReplyBtn" title="Отменить ответ">✕</button>
+          </div>
+
+          <div class="composer" id="composer">
+            <div class="voice-recording hidden" id="voiceRecordingBar">
+              <span>🎙 Запись… <span id="voiceTimer">0:00</span> · отпустите для отправки, потяните вверх для отмены</span>
+            </div>
+            <button class="icon-btn" id="attachBtn" title="Прикрепить">📎</button>
+            <div class="attach-menu hidden" id="attachMenu">
+              <button data-kind="image">🖼 Фото</button>
+              <button data-kind="video">🎬 Видео</button>
+              <button data-kind="file">📄 Файл</button>
+              <button data-kind="music">🎵 Музыка</button>
+              <button data-kind="poll">📊 Опрос</button>
+              <button data-kind="location">📍 Геолокация</button>
+            </div>
+            <button class="icon-btn" id="stickerBtn" title="Стикеры">😊</button>
+            <div class="sticker-panel hidden" id="stickerPanel"></div>
+            <button class="icon-btn" id="formatBtn" title="Форматирование текста">Aa</button>
+            <div class="format-menu hidden" id="formatMenu">
+              <button data-format="bold" title="Жирный (Ctrl+B)"><b>Ж</b></button>
+              <button data-format="italic" title="Курсив (Ctrl+I)"><i>К</i></button>
+              <button data-format="strike" title="Зачёркнутый"><s>З</s></button>
+              <button data-format="code" title="Моноширинный">&lt;/&gt;</button>
+              <button data-format="link" title="Ссылка (Ctrl+K)">🔗</button>
+            </div>
+            <button class="icon-btn miniapp-btn hidden" id="miniAppBtn" title="Открыть мини-приложение">
+              <img src="/assets/miniapp-icon-white.png" alt="">
+            </button>
+
+            <textarea id="messageInput" placeholder="Сообщение" autocomplete="off" rows="1"></textarea>
+
+            <button class="icon-btn record-btn" id="recordBtn" title="Голосовое сообщение — нажмите и удерживайте (короткий тап переключает на видео-кружок)">🎙</button>
+            <button class="icon-btn send-btn hidden" id="sendBtn" title="Отправить">➤</button>
+
+            <input type="file" id="fileInputImage" accept="image/*" multiple class="hidden">
+            <input type="file" id="fileInputVideo" accept="video/*" multiple class="hidden">
+            <input type="file" id="fileInputFile" accept="*/*" class="hidden">
+            <input type="file" id="fileInputMusic" accept="audio/*" class="hidden">
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== РАЗДЕЛ: ЗВОНКИ ===== -->
+    <section class="app-section hidden" id="sectionCalls">
+      <div class="page-header"><h2 data-i18n="header_calls">Звонки</h2></div>
+      <div class="calls-list" id="callsList"></div>
+    </section>
+
+    <!-- ===== РАЗДЕЛ: НАСТРОЙКИ ===== -->
+    <section class="app-section hidden" id="sectionSettings">
+
+      <!-- ---- Главный список настроек (пункты) ---- -->
+      <div id="settingsMainView">
+        <div class="page-header"><h2 data-i18n="header_settings">Настройки</h2></div>
+        <div class="settings-page-content">
+
+          <button class="settings-profile-card" data-settings-page="profile">
+            <div class="my-avatar big" id="settingsHeaderAvatar"></div>
+            <div class="settings-profile-info">
+              <div class="settings-profile-name" id="settingsHeaderName"></div>
+              <div class="settings-profile-sub" id="settingsHeaderSub"></div>
+            </div>
+            <span class="sli-chevron">›</span>
+          </button>
+
+          <div class="settings-list-group">
+            <button class="settings-list-item" id="changePhotoRow">
+              <span class="sli-label sli-label-accent" data-i18n="settings_change_photo">Изменить фотографию</span>
+            </button>
+          </div>
+
+          <div class="settings-list-group">
+            <button class="settings-list-item premium-list-item" data-settings-page="premium">
+              <span class="sli-icon sli-icon-premium">⭐</span>
+              <span class="sli-label" data-i18n="settings_premium">Asteria Premium</span>
+              <span class="sli-value" id="premiumStatusValue">199 ₽/мес</span>
+              <span class="sli-chevron">›</span>
+            </button>
+          </div>
+
+          <div class="settings-list-group">
+            <button class="settings-list-item" data-settings-page="profile">
+              <span class="sli-icon sli-icon-red">👤</span>
+              <span class="sli-label" data-i18n="settings_my_profile">Мой профиль</span>
+              <span class="sli-chevron">›</span>
+            </button>
+          </div>
+
+          <div class="settings-list-group">
+            <button class="settings-list-item" data-settings-page="wallet">
+              <span class="sli-icon sli-icon-blue">💳</span>
+              <span class="sli-label" data-i18n="settings_wallet">Кошелёк</span>
+              <span class="sli-chevron">›</span>
+            </button>
+          </div>
+
+          <div class="settings-list-group">
+            <button class="settings-list-item" data-settings-page="favorites">
+              <span class="sli-icon sli-icon-blue">🔖</span>
+              <span class="sli-label" data-i18n="settings_favorites">Избранное</span>
+              <span class="sli-chevron">›</span>
+            </button>
+            <button class="settings-list-item" data-settings-page="calls">
+              <span class="sli-icon sli-icon-green">📞</span>
+              <span class="sli-label" data-i18n="settings_recent_calls">Недавние звонки</span>
+              <span class="sli-chevron">›</span>
+            </button>
+            <button class="settings-list-item" data-settings-page="devices">
+              <span class="sli-icon sli-icon-orange">📱</span>
+              <span class="sli-label" data-i18n="settings_devices">Устройства</span>
+              <span class="sli-value">QR-код</span>
+              <span class="sli-chevron">›</span>
+            </button>
+            <button class="settings-list-item" data-settings-page="folders">
+              <span class="sli-icon sli-icon-skyblue">🗂</span>
+              <span class="sli-label" data-i18n="settings_folders">Папки с чатами</span>
+              <span class="sli-chevron">›</span>
+            </button>
+          </div>
+
+          <div class="settings-list-group">
+            <button class="settings-list-item" data-settings-page="notifications">
+              <span class="sli-icon sli-icon-red">🔔</span>
+              <span class="sli-label" data-i18n="settings_notifications">Уведомления и звуки</span>
+              <span class="sli-chevron">›</span>
+            </button>
+            <button class="settings-list-item" data-settings-page="privacy">
+              <span class="sli-icon sli-icon-gray">🔒</span>
+              <span class="sli-label" data-i18n="settings_privacy">Конфиденциальность</span>
+              <span class="sli-chevron">›</span>
+            </button>
+            <button class="settings-list-item" data-settings-page="storage">
+              <span class="sli-icon sli-icon-teal">🗄</span>
+              <span class="sli-label" data-i18n="settings_storage">Данные и память</span>
+              <span class="sli-chevron">›</span>
+            </button>
+            <button class="settings-list-item" data-settings-page="appearance">
+              <span class="sli-icon sli-icon-cyan">◐</span>
+              <span class="sli-label" data-i18n="settings_appearance">Оформление</span>
+              <span class="sli-chevron">›</span>
+            </button>
+            <button class="settings-list-item" data-settings-page="powersaving">
+              <span class="sli-icon sli-icon-amber">🔋</span>
+              <span class="sli-label" data-i18n="settings_powersaving">Энергосбережение</span>
+              <span class="sli-value" id="powerSavingValue">Выкл.</span>
+              <span class="sli-chevron">›</span>
+            </button>
+            <button class="settings-list-item" data-settings-page="language">
+              <span class="sli-icon sli-icon-purple">🌐</span>
+              <span class="sli-label" data-i18n="settings_language">Язык</span>
+              <span class="sli-value" id="languageStatusValue">Русский</span>
+              <span class="sli-chevron">›</span>
+            </button>
+          </div>
+
+          <div class="settings-list-group">
+            <button class="settings-list-item hidden" id="openAdminFromSettingsBtn">
+              <span class="sli-icon sli-icon-gray">🛡</span>
+              <span class="sli-label" data-i18n="settings_admin_panel">Админ-панель</span>
+              <span class="sli-chevron">›</span>
+            </button>
+            <button class="settings-list-item settings-list-item-danger" id="logoutBtn">
+              <span class="sli-label" data-i18n="settings_logout">Выйти из аккаунта</span>
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ---- Дочерняя страница выбранного пункта ---- -->
+      <div id="settingsSubView" class="hidden">
+        <div class="page-header-centered settings-sub-header">
+          <button class="icon-btn profile-back-btn" id="settingsSubBackBtn" title="Назад">←</button>
+          <h2 id="settingsSubTitle">Раздел</h2>
+          <button class="settings-edit-toggle hidden" id="profileEditToggleBtn">Изм.</button>
+        </div>
+        <div class="settings-page-content">
+
+          <!-- Asteria Premium -->
+          <div class="settings-sub-page hidden" id="subPagePremium">
+            <div class="premium-hero" id="premiumHero">
+              <div class="premium-hero-star">⭐</div>
+              <div class="premium-hero-title" id="premiumHeroTitle">Asteria Premium</div>
+              <div class="premium-hero-sub" id="premiumHeroSub">199 ₽/мес</div>
+            </div>
+            <div class="settings-placeholder-note" id="premiumHowToGet">
+              Подписка не продаётся напрямую в приложении — оформить её может только администратор через админ-панель. Если хотите Premium, напишите администратору.
+            </div>
+            <div class="modal-subtitle">Что даёт подписка</div>
+            <div class="premium-perks-list">
+              <div class="premium-perk"><span class="premium-perk-icon">⭐</span><div><b>Золотой значок и рамка аватара</b><div class="chat-header-sub">Отличает вас рядом с именем — в чатах, профиле и списке участников.</div></div></div>
+              <div class="premium-perk"><span class="premium-perk-icon">📁</span><div><b>Файлы и медиа до 120 МБ</b><div class="chat-header-sub">Вместо обычных 25 МБ — для фото, видео и документов.</div></div></div>
+              <div class="premium-perk"><span class="premium-perk-icon">⏳</span><div><b>Истории живут 48 часов</b><div class="chat-header-sub">В два раза дольше, чем обычные 24 часа.</div></div></div>
+              <div class="premium-perk"><span class="premium-perk-icon">✨</span><div><b>Анимированные emoji-реакции</b><div class="chat-header-sub">Эксклюзивный набор реакций, недоступный остальным пользователям.</div></div></div>
+              <div class="premium-perk"><span class="premium-perk-icon">🎨</span><div><b>Премиум-темы «Аврора» и «Золото»</b><div class="chat-header-sub">Особое оформление интерфейса, доступное только по подписке.</div></div></div>
+              <div class="premium-perk"><span class="premium-perk-icon">🖼️</span><div><b>Свой фон чата</b><div class="chat-header-sub">Загрузите любое своё фото на фон переписок — бесплатным пользователям доступна только готовая галерея.</div></div></div>
+              <div class="premium-perk"><span class="premium-perk-icon">🛡️</span><div><b>Приоритетная поддержка</b><div class="chat-header-sub">Ваши обращения администратору отмечаются значком Premium.</div></div></div>
+              <div class="premium-perk"><span class="premium-perk-icon">🙈</span><div><b>Скрыть статус «в сети»</b><div class="chat-header-sub">Никто не увидит, что вы сейчас онлайн — ни в чатах, ни в профиле. Вы при этом продолжаете видеть статус остальных.</div></div></div>
+            </div>
+          </div>
+
+          <!-- Мой профиль -->
+          <div class="settings-sub-page" id="subPageProfile">
+
+            <div class="profile-hero">
+              <div class="profile-hero-avatar-wrap">
+                <div class="my-avatar big xl" id="settingsAvatarPreview"></div>
+                <!-- Маленькая круглая кнопка-камера поверх аватара — видна
+                     только в режиме редактирования (см. .profile-editing
+                     в JS/CSS ниже). Заменяет прежнюю широкую пилюлю
+                     "Изменить фото", занимавшую всю ширину экрана. -->
+                <button class="avatar-edit-fab" id="changeAvatarBtn" title="Изменить фото" aria-label="Изменить фото">📷</button>
+                <input type="file" id="avatarInput" accept="image/*" class="hidden">
+              </div>
+              <div class="profile-hero-name" id="profileHeroName"></div>
+              <div class="profile-hero-username" id="profileHeroUsername"></div>
+              <!-- Была вторая огромная кнопка-пилюля "Удалить фото" — теперь
+                   скромная текстовая ссылка под именем, тоже только в
+                   режиме редактирования. -->
+              <button class="profile-remove-photo-link" id="removeAvatarBtn">Удалить фото</button>
+            </div>
+
+            <!-- Режим просмотра -->
+            <div id="profileViewMode">
+              <div class="settings-list-group settings-info-group">
+                <div class="settings-info-row">
+                  <div class="grow">
+                    <div class="sir-label">имя пользователя</div>
+                    <div class="sir-value" id="profileInfoUsername"></div>
+                  </div>
+                  <button class="icon-btn" id="profileQrBtn" title="Показать QR-код">▦</button>
+                </div>
+                <div class="settings-info-row">
+                  <div class="grow">
+                    <div class="sir-label">о себе</div>
+                    <div class="sir-value" id="profileInfoStatus"></div>
+                  </div>
+                </div>
+                <div class="settings-info-row">
+                  <div class="grow">
+                    <div class="sir-label">на платформе с</div>
+                    <div class="sir-value" id="profileInfoJoined"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Режим редактирования -->
+            <div id="profileEditMode" class="hidden">
+              <div class="settings-field">
+                <div class="sir-label">ваше имя</div>
+                <input type="text" id="settingsDisplayName" placeholder="Отображаемое имя">
+              </div>
+              <div class="settings-field">
+                <div class="sir-label">логин</div>
+                <input type="text" id="settingsUsername" placeholder="Логин">
+              </div>
+              <div class="settings-field">
+                <div class="sir-label">о себе</div>
+                <input type="text" id="settingsStatus" placeholder="Пара слов о себе">
+              </div>
+              <div class="settings-error" id="settingsError"></div>
+              <!-- Раньше здесь была ещё одна кнопка "Сохранить", дублирующая
+                   кнопку "Готово" в шапке (#profileEditToggleBtn) — та и так
+                   сохраняет изменения и закрывает режим редактирования (см.
+                   обработчик в app.js). Отдельная "Сохранить" делала то же
+                   самое, но БЕЗ выхода из режима редактирования, то есть по
+                   сути дублировала функциональность лишней кнопкой. Убрана
+                   — сохранение и выход теперь только через "Готово". -->
+            </div>
+
+          </div>
+
+
+          <!-- Кошелёк -->
+          <div class="settings-sub-page hidden" id="subPageWallet">
+            <div class="settings-placeholder">💳<br>Кошелёк Asteria скоро появится — здесь будут ваши платежи и подарки.</div>
+          </div>
+
+          <!-- Избранное -->
+          <div class="settings-sub-page hidden" id="subPageFavorites">
+            <div class="settings-placeholder">🔖<br>Сохранённые сообщения будут отображаться здесь.</div>
+          </div>
+
+          <!-- Устройства -->
+          <div class="settings-sub-page hidden" id="subPageDevices">
+            <div class="modal-subtitle" data-i18n="devices_this_device">Это устройство</div>
+            <div id="currentDeviceRow" class="folder-row"></div>
+
+            <div class="modal-subtitle" data-i18n="devices_other_sessions" style="margin-top:16px;">Другие сеансы</div>
+            <div id="otherDevicesList" class="modal-list"></div>
+            <div class="chat-header-sub hidden" id="devicesEmptyHint" style="padding:6px 2px 0;">Нет других активных входов.</div>
+
+            <button class="btn-secondary hidden" id="revokeOtherSessionsBtn" data-i18n="devices_revoke_others" style="margin-top:12px;">Завершить все другие сеансы</button>
+            <button class="btn-secondary" id="confirmQrCodeBtn" data-i18n="devices_confirm_by_code" style="margin-top:8px;">📷 Подтвердить вход по коду</button>
+            <div class="settings-error" id="devicesError"></div>
+          </div>
+
+          <!-- Папки с чатами -->
+          <div class="settings-sub-page hidden" id="subPageFolders">
+            <div id="foldersListSettings" class="modal-list"></div>
+            <button class="btn-secondary" id="createFolderBtn">+ Создать папку</button>
+          </div>
+
+          <!-- Уведомления и звуки -->
+          <div class="settings-sub-page hidden" id="subPageNotifications">
+            <div class="modal-subtitle">Уведомления в браузере</div>
+            <div class="chat-header-sub" style="padding: 0 2px 8px;">Разрешите уведомления, чтобы не пропускать новые сообщения, когда вкладка свёрнута.</div>
+            <button class="btn-secondary" id="enableNotificationsBtn">🔔 Включить уведомления</button>
+            <div class="settings-error" id="notificationsStatus"></div>
+
+            <div class="modal-subtitle">Рингтон звонка</div>
+            <div class="chat-header-sub" style="padding: 0 2px 8px;">Мелодия, которая звучит у вас, когда вам звонят. У того, кто звонит — всегда обычные гудки вызова.</div>
+            <div class="settings-toggle-block">
+              <div class="settings-list-group">
+                <label class="checkbox-row lang-radio-row"><span class="cr-label">Классический</span><input type="radio" name="ringtoneRadio" id="ringtoneRadioClassic" value="classic"></label>
+                <label class="checkbox-row lang-radio-row"><span class="cr-label">Свой</span><input type="radio" name="ringtoneRadio" id="ringtoneRadioCustom" value="custom"></label>
+              </div>
+            </div>
+            <div class="settings-list-group" id="ringtonePreviewRow" style="padding:10px 14px; display:flex; gap:8px; align-items:center;">
+              <button class="btn-secondary" id="previewRingtoneBtn" type="button">▶ Прослушать</button>
+              <button class="btn-secondary hidden" id="uploadRingtoneBtn" type="button">📁 Загрузить свой звук</button>
+              <input type="file" id="ringtoneInput" accept="audio/*" class="hidden">
+            </div>
+            <div class="settings-error" id="ringtoneStatus"></div>
+          </div>
+
+          <!-- Конфиденциальность -->
+          <div class="settings-sub-page hidden" id="subPagePrivacy">
+            <div class="modal-subtitle">Видимость профиля</div>
+
+            <div class="settings-toggle-block">
+              <div class="settings-list-group">
+                <label class="checkbox-row"><span class="cr-label">Разрешить находить меня по логину в поиске</span><input type="checkbox" id="discoverableCheckbox"></label>
+              </div>
+              <div class="settings-footnote">Если выключить — вас не найдут через поиск людей, но те, у кого уже есть с вами чат или общий канал, по-прежнему будут вас видеть.</div>
+            </div>
+
+            <div class="settings-toggle-block">
+              <div class="settings-list-group">
+                <label class="checkbox-row" id="hideOnlineRow"><span class="cr-label">Скрыть мой статус «в сети» <span class="premium-badge" title="Asteria Premium">⭐</span></span><input type="checkbox" id="hideOnlineCheckbox"></label>
+              </div>
+              <div class="settings-footnote">Никто не будет видеть, что вы сейчас в сети — ни в чатах, ни в вашем профиле. Сами вы статус остальных по-прежнему видите. Доступно с Asteria Premium.</div>
+            </div>
+
+            <div class="settings-toggle-block">
+              <div class="settings-list-group">
+                <label class="checkbox-row" id="hideReadStatusRow"><span class="cr-label">Скрыть отметки о прочтении <span class="premium-badge" title="Asteria Premium">⭐</span></span><input type="checkbox" id="hideReadStatusCheckbox"></label>
+              </div>
+              <div class="settings-footnote">Собеседники в личных чатах не увидят синюю точку «прочитано» у отправленных вам сообщений — даже если вы их уже открыли. Сами вы по-прежнему видите, прочитали ли ваши сообщения. Доступно с Asteria Premium.</div>
+            </div>
+
+            <div class="modal-subtitle">Смена пароля</div>
+            <div class="settings-list-group settings-form-group">
+              <div class="password-field-wrap">
+                <input type="password" id="currentPasswordInput" placeholder="Текущий пароль" autocomplete="current-password">
+                <button type="button" class="password-toggle-eye" data-toggle="currentPasswordInput">👁</button>
+              </div>
+              <div class="password-field-wrap">
+                <input type="password" id="newPasswordInput" placeholder="Новый пароль (мин. 4 символа)" autocomplete="new-password">
+                <button type="button" class="password-toggle-eye" data-toggle="newPasswordInput">👁</button>
+              </div>
+              <div class="password-strength" id="passwordStrength"><span></span><span></span><span></span><span></span></div>
+              <div class="settings-error" id="passwordError"></div>
+              <button class="btn-secondary" id="changePasswordBtn">Сменить пароль</button>
+            </div>
+          </div>
+
+          <!-- Данные и память -->
+          <div class="settings-sub-page hidden" id="subPageStorage">
+            <div class="settings-placeholder">🗄<br>Управление кэшем и автозагрузкой медиа появится здесь позже.</div>
+          </div>
+
+          <!-- Оформление -->
+          <div class="settings-sub-page hidden" id="subPageAppearance">
+            <div class="modal-subtitle">Тема оформления</div>
+            <div class="theme-picker" id="themePicker">
+              <button class="theme-swatch" data-theme-value="system"><span class="swatch-circle swatch-system"></span><span class="theme-swatch-label">Как в системе</span></button>
+              <button class="theme-swatch" data-theme-value="light"><span class="swatch-circle swatch-light"></span><span class="theme-swatch-label">Светлая</span></button>
+              <button class="theme-swatch" data-theme-value="dark"><span class="swatch-circle swatch-dark"></span><span class="theme-swatch-label">Тёмная</span></button>
+              <button class="theme-swatch" data-theme-value="midnight"><span class="swatch-circle swatch-midnight"></span><span class="theme-swatch-label">Полночь</span></button>
+              <button class="theme-swatch" data-theme-value="sunset"><span class="swatch-circle swatch-sunset"></span><span class="theme-swatch-label">Закат</span></button>
+              <button class="theme-swatch" data-theme-value="forest"><span class="swatch-circle swatch-forest"></span><span class="theme-swatch-label">Лес</span></button>
+              <button class="theme-swatch" data-theme-value="rose"><span class="swatch-circle swatch-rose"></span><span class="theme-swatch-label">Роза</span></button>
+              <button class="theme-swatch theme-swatch-premium" data-theme-value="aurora"><span class="swatch-circle swatch-aurora"></span><span class="theme-swatch-label">Аврора <span class="premium-lock">⭐</span></span></button>
+              <button class="theme-swatch theme-swatch-premium" data-theme-value="gold"><span class="swatch-circle swatch-gold"></span><span class="theme-swatch-label">Золото <span class="premium-lock">⭐</span></span></button>
+            </div>
+
+            <div class="modal-subtitle">Фон чатов</div>
+            <div class="wallpaper-presets" id="wallpaperPresets"></div>
+            <input type="file" id="wallpaperInput" accept="image/*" class="hidden">
+          </div>
+
+          <!-- Энергосбережение -->
+          <div class="settings-sub-page hidden" id="subPagePowerSaving">
+            <div class="settings-toggle-block">
+              <div class="settings-list-group">
+                <label class="checkbox-row"><span class="cr-label">Отключить автовоспроизведение видео и анимации</span><input type="checkbox" id="powerSavingCheckbox"></label>
+              </div>
+              <div class="settings-footnote">Экономит трафик и заряд батареи на слабых устройствах.</div>
+            </div>
+          </div>
+
+          <!-- Язык -->
+          <div class="settings-sub-page hidden" id="subPageLanguage">
+            <div class="settings-toggle-block">
+              <div class="settings-list-group">
+                <label class="checkbox-row lang-radio-row"><span class="cr-label" data-i18n="lang_ru">Русский</span><input type="radio" name="langRadio" id="langRadioRu" value="ru"></label>
+                <label class="checkbox-row lang-radio-row"><span class="cr-label" data-i18n="lang_en">English</span><input type="radio" name="langRadio" id="langRadioEn" value="en"></label>
+              </div>
+              <div class="settings-footnote" data-i18n="lang_footnote">Переведена основная часть интерфейса; отдельные экраны и сообщения пока на русском.</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ===== РАЗДЕЛ: ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ ===== -->
+    <section class="app-section hidden" id="sectionProfile">
+      <div class="page-header-centered">
+        <button class="icon-btn profile-back-btn" id="profileBackBtn" title="Назад">←</button>
+        <h2>Профиль</h2>
+        <button class="btn-secondary hidden" id="editContactNicknameBtn" style="padding:6px 12px; font-size:13px; white-space:nowrap; justify-self:end;">Изм.</button>
+      </div>
+      <div class="settings-page-content" id="profileViewContent"></div>
+    </section>
+
+    <!-- ===== РАЗДЕЛ: ПРОФИЛЬ КАНАЛА/ГРУППЫ ===== -->
+    <section class="app-section hidden" id="sectionChannel">
+      <div class="page-header-centered">
+        <button class="icon-btn profile-back-btn" id="channelBackBtn" title="Назад">←</button>
+        <h2 id="channelModalTitle">Канал</h2>
+        <span></span>
+      </div>
+      <div class="settings-page-content" id="channelViewContent"></div>
+    </section>
+
+    <!-- ===== РАЗДЕЛ: АДМИН-ПАНЕЛЬ ===== -->
+    <section class="app-section hidden admin-section" id="sectionAdmin">
+      <div class="page-header">
+        <button class="icon-btn back-btn admin-back-btn" id="adminBackBtn" title="Назад">←</button>
+        <h2 data-i18n="header_admin">🛡 Админ-панель</h2>
+        <button class="btn-danger admin-revoke-btn" id="adminRevokeSelfBtn">Снять с себя админку</button>
+      </div>
+      <div class="modal-tabs">
+        <button class="modal-tab active" data-atab="users">Пользователи</button>
+        <button class="modal-tab" data-atab="chats">Все чаты</button>
+        <button class="modal-tab" data-atab="apk">Новый APK</button>
+        <button class="modal-tab" data-atab="banner">Баннер</button>
+        <button class="modal-tab" data-atab="export">Экспорт БД</button>
+      </div>
+      <div id="adminUsersTab" class="admin-tab-content"></div>
+      <div id="adminChatsTab" class="admin-tab-content hidden"></div>
+      <div id="adminApkTab" class="admin-tab-content hidden"></div>
+      <div id="adminBannerTab" class="admin-tab-content hidden"></div>
+      <div id="adminExportTab" class="admin-tab-content hidden"></div>
+    </section>
+
+  </div>
+
+  <!-- Нижний плавающий бар (телефон) -->
+  <nav class="bottom-nav" id="bottomNav">
+    <div class="bottom-nav-indicator" id="bottomNavIndicator"></div>
+    <button class="bottom-nav-btn active" data-section="chats"><span class="nri">💬</span><span class="nrl" data-i18n="nav_chats">Чаты</span></button>
+    <button class="bottom-nav-btn" data-section="calls"><span class="nri">📞</span><span class="nrl" data-i18n="nav_calls">Звонки</span></button>
+    <button class="bottom-nav-btn" data-section="settings"><span class="nri">⚙</span><span class="nrl" data-i18n="nav_settings">Настройки</span></button>
+  </nav>
+</div>
+
+<!-- Полноэкранный флоу создания чата/группы/канала (не модалка) -->
+<div class="compose-flow hidden" id="composeFlow">
+
+  <div class="compose-screen" id="composeMenuScreen">
+    <div class="compose-header">
+      <button class="icon-btn" id="composeCloseBtn">✕</button>
+      <div class="compose-header-title">Новый чат</div>
+      <div class="compose-header-spacer"></div>
+    </div>
+    <div class="compose-list">
+      <button class="compose-list-item" data-compose-target="composeNewChatScreen">
+        <span class="compose-list-icon">💬</span>
+        <div class="compose-list-text"><div>Создать чат</div><div class="compose-list-sub">Найти человека по логину или почте</div></div>
+        <span class="compose-list-arrow">›</span>
+      </button>
+      <button class="compose-list-item" data-compose-target="composeNewGroupScreen">
+        <span class="compose-list-icon">👥</span>
+        <div class="compose-list-text"><div>Создать группу</div><div class="compose-list-sub">Групповой чат — писать могут все участники</div></div>
+        <span class="compose-list-arrow">›</span>
+      </button>
+      <button class="compose-list-item" data-compose-target="composeNewChannelScreen">
+        <span class="compose-list-icon">📢</span>
+        <div class="compose-list-text"><div>Создать канал</div><div class="compose-list-sub">Вещание на подписчиков — пишет только владелец</div></div>
+        <span class="compose-list-arrow">›</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="compose-screen hidden" id="composeNewChatScreen">
+    <div class="compose-header">
+      <button class="icon-btn" data-compose-back>←</button>
+      <div class="compose-header-title">Создать чат</div>
+      <div class="compose-header-spacer"></div>
+    </div>
+    <div class="compose-body">
+      <div class="compose-field-hint">Совет: чтобы найти уже открытый чат или канал — используйте поиск в списке чатов. Здесь можно добавить нового человека по логину/почте:</div>
+      <input type="text" id="composeUserSearchInput" placeholder="Логин или почта (минимум 2 символа)…" autocomplete="off">
+      <div id="composeUserResults" class="modal-list"></div>
+      <button class="link-btn" id="composeShowChannelsBtn">Или посмотреть публичные каналы →</button>
+      <div id="composeChannelsList" class="modal-list hidden"></div>
+    </div>
+  </div>
+
+  <div class="compose-screen hidden" id="composeAddContactScreen">
+    <div class="compose-header">
+      <button class="icon-btn" data-compose-back>←</button>
+      <div class="compose-header-title">Добавить контакт</div>
+      <div class="compose-header-spacer"></div>
+    </div>
+    <div class="compose-body">
+      <div class="compose-contact-preview" id="composeContactPreview"></div>
+      <label class="compose-field-label">Локальное имя (по желанию)</label>
+      <input type="text" id="composeNicknameInput" placeholder="Например: Сыночек">
+      <div class="compose-field-hint">Так этот человек будет отображаться только у вас — он не увидит, как вы его подписали.</div>
+      <button class="btn-primary" id="composeAddContactBtn">Добавить и написать</button>
+    </div>
+  </div>
+
+  <div class="compose-screen hidden" id="composeNewGroupScreen">
+    <div class="compose-header">
+      <button class="icon-btn" data-compose-back>←</button>
+      <div class="compose-header-title">Создать группу</div>
+      <div class="compose-header-spacer"></div>
+    </div>
+    <div class="compose-body" id="composeGroupForm">
+      <label class="compose-field-label">Название группы</label>
+      <input type="text" id="composeGroupName" placeholder="Например: Семья">
+      <button class="btn-primary" id="composeCreateGroupBtn">Создать</button>
+    </div>
+    <div class="compose-body hidden" id="composeGroupDone">
+      <div class="compose-success-icon">✅</div>
+      <div class="compose-field-label">Группа создана!</div>
+      <div class="compose-field-hint">Пригласительная ссылка — по ней люди сразу вступят в группу:</div>
+      <div class="compose-invite-link" id="composeGroupInviteLink"></div>
+      <button class="btn-secondary" id="composeCopyGroupLinkBtn">Скопировать ссылку</button>
+      <button class="btn-secondary" id="composeShareGroupBtn">Поделиться</button>
+      <div class="compose-qr" id="composeGroupQr"></div>
+      <button class="btn-primary" id="composeGroupOpenBtn">Открыть группу</button>
+    </div>
+  </div>
+
+  <div class="compose-screen hidden" id="composeNewChannelScreen">
+    <div class="compose-header">
+      <button class="icon-btn" data-compose-back>←</button>
+      <div class="compose-header-title">Создать канал</div>
+      <div class="compose-header-spacer"></div>
+    </div>
+    <div class="compose-body" id="composeChannelForm">
+      <label class="compose-field-label">Название канала</label>
+      <input type="text" id="composeChannelName" placeholder="Например: Новости проекта">
+      <button class="btn-primary" id="composeCreateChannelBtn">Создать</button>
+    </div>
+    <div class="compose-body hidden" id="composeChannelDone">
+      <div class="compose-success-icon">✅</div>
+      <div class="compose-field-label">Канал создан!</div>
+      <div class="compose-field-hint">Публичная ссылка для подписки:</div>
+      <div class="compose-invite-link" id="composeChannelInviteLink"></div>
+      <button class="btn-secondary" id="composeCopyChannelLinkBtn">Скопировать ссылку</button>
+      <button class="btn-secondary" id="composeShareChannelBtn">Поделиться</button>
+      <div class="compose-qr" id="composeChannelQr"></div>
+      <button class="btn-primary" id="composeChannelOpenBtn">Открыть канал</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- Универсальный экран "Поделиться" — ссылка + QR-код (звонок, профиль, группа, канал) -->
+<div class="modal hidden" id="shareModal">
+  <div class="modal-card">
+    <div class="modal-title"><span id="shareModalTitle">Поделиться</span> <button class="modal-close" data-close="shareModal">✕</button></div>
+    <div class="compose-invite-link" id="shareModalLink"></div>
+    <button class="btn-secondary" id="shareModalCopyBtn">Скопировать ссылку</button>
+    <button class="btn-secondary hidden" id="shareModalNativeBtn">Поделиться через…</button>
+    <div class="compose-qr" id="shareModalQr"></div>
+  </div>
+</div>
+
+<!-- Модалка создания опроса -->
+<div class="modal hidden" id="pollCreateModal">
+  <div class="modal-card">
+    <div class="modal-title">Опрос <button class="modal-close" data-close="pollCreateModal">✕</button></div>
+    <input type="text" id="pollQuestionInput" placeholder="Вопрос" maxlength="300">
+    <div class="modal-subtitle">Варианты ответа (от 2 до 12)</div>
+    <div id="pollOptionsList" class="modal-list"></div>
+    <button class="btn-secondary" id="pollAddOptionBtn">+ Добавить вариант</button>
+    <div class="modal-divider"></div>
+    <label class="checkbox-row"><input type="checkbox" id="pollMultipleCheckbox"> Разрешить выбрать несколько вариантов</label>
+    <div id="pollMaxChoicesRow" class="hidden">
+      <span class="chat-header-sub">Максимум вариантов на человека</span>
+      <select id="pollMaxChoicesSelect"></select>
+    </div>
+    <div class="settings-error" id="pollError"></div>
+    <button class="btn-primary" id="pollSendBtn">Отправить опрос</button>
+  </div>
+</div>
+
+<!-- Модалка предпросмотра фото перед отправкой -->
+<div class="modal hidden" id="imagePreviewModal">
+  <div class="modal-card">
+    <div class="modal-title">Отправить фото <button class="modal-close" data-close="imagePreviewModal">✕</button></div>
+    <div class="image-preview-wrap"><img id="imagePreviewImg" src=""></div>
+    <textarea id="imagePreviewCaption" class="caption-input" placeholder="Подпись (необязательно)" rows="1"></textarea>
+    <button class="btn-primary" id="imagePreviewSendBtn">Отправить</button>
+  </div>
+</div>
+
+<!-- Модалка отправки сразу нескольких фото/видео (до 10 штук за раз) -->
+<div class="modal hidden" id="mediaBatchModal">
+  <div class="modal-card">
+    <div class="modal-title">Отправить <span id="mediaBatchCount"></span> <button class="modal-close" data-close="mediaBatchModal">✕</button></div>
+    <div class="media-batch-grid" id="mediaBatchGrid"></div>
+    <textarea id="mediaBatchCaption" class="caption-input" placeholder="Подпись (необязательно)" rows="1"></textarea>
+    <button class="btn-primary" id="mediaBatchSendBtn">Отправить</button>
+  </div>
+</div>
+
+<!-- Модалка пересылки сообщения в другой чат (можно выбрать несколько) -->
+<div class="modal hidden" id="forwardModal">
+  <div class="modal-card">
+    <div class="modal-title">Переслать <button class="modal-close" data-close="forwardModal">✕</button></div>
+    <input type="text" id="forwardSearchInput" placeholder="Поиск чата…">
+    <div class="forward-conv-list" id="forwardConvList"></div>
+    <button class="btn-primary" id="forwardSendBtn" disabled>Переслать</button>
+  </div>
+</div>
+
+<!-- Лайтбокс просмотра фото/видео -->
+<div class="lightbox hidden" id="lightbox">
+  <button class="story-close" id="lightboxClose">✕</button>
+  <div class="lightbox-download-wrap" id="lightboxDownloadWrap">
+    <button class="lightbox-download-btn" id="lightboxDownloadBtn" title="Сохранить">⬇</button>
+    <div class="lightbox-download-menu hidden" id="lightboxDownloadMenu">
+      <button type="button" data-mode="one">Скачать это фото</button>
+      <button type="button" data-mode="album">Скачать весь альбом</button>
+    </div>
+  </div>
+  <div class="lightbox-counter hidden" id="lightboxCounter"></div>
+  <button class="lightbox-nav-btn lightbox-nav-prev hidden" id="lightboxPrevBtn" title="Предыдущее">‹</button>
+  <button class="lightbox-nav-btn lightbox-nav-next hidden" id="lightboxNextBtn" title="Следующее">›</button>
+  <img id="lightboxImg" src="">
+  <video id="lightboxVideo" class="hidden" controls playsinline></video>
+</div>
+
+<!-- Модалка историй -->
+<div class="modal hidden story-modal" id="storyModal">
+  <div class="story-viewer" id="storyViewer"></div>
+</div>
+<div class="modal hidden" id="createStoryModal">
+  <div class="modal-card">
+    <div class="modal-title">Новая история <button class="modal-close" data-close="createStoryModal">✕</button></div>
+    <input type="file" id="storyFileInput" accept="image/*,video/*" class="hidden">
+    <button class="btn-secondary" id="storyPickFileBtn">Выбрать фото/видео</button>
+    <div id="storyPreviewWrap"></div>
+    <input type="text" id="storyCaption" placeholder="Подпись (необязательно)">
+    <button class="btn-primary" id="publishStoryBtn">Опубликовать</button>
+  </div>
+</div>
+
+<!-- Локальное имя контакта (кнопка "Изменить" в профиле) -->
+<div class="modal hidden" id="contactNicknameModal">
+  <div class="modal-card">
+    <div class="modal-title">Локальное имя <button class="modal-close" data-close="contactNicknameModal">✕</button></div>
+    <div class="chat-header-sub" style="padding:0 2px 10px;">Видно только вам — собеседник не узнает, как вы его подписали.</div>
+    <input type="text" id="contactNicknameInput" placeholder="Например: Сыночек" maxlength="60">
+    <button class="btn-primary" id="saveContactNicknameBtn">Сохранить</button>
+    <button class="btn-secondary" id="removeContactBtn" style="margin-top:8px; color:var(--danger);">Убрать из контактов</button>
+  </div>
+</div>
+
+<!-- Полноэкранный экран звонка (1:1) -->
+<div class="call-screen hidden" id="callOverlay">
+  <video id="remoteVideo" autoplay playsinline class="call-remote-video vid-big hidden"></video>
+  <div class="call-bg-blur" id="callBgBlur"></div>
+
+  <div class="call-screen-top">
+    <div class="call-avatar-big" id="callAvatarBig"></div>
+    <div class="call-peer" id="callPeerName"></div>
+    <div class="call-status" id="callStatus">Вызов…</div>
+  </div>
+
+  <video id="localVideo" autoplay playsinline muted class="local-video vid-pip hidden"></video>
+
+  <div class="call-screen-bottom">
+    <div class="call-controls">
+      <button class="call-round-btn" id="toggleMicBtn" title="Микрофон">
+        <span class="ic-on">🎙</span><span class="ic-off">🔇</span>
+      </button>
+      <button class="call-round-btn" id="toggleCamBtn" title="Камера">
+        <span class="ic-on">🎥</span><span class="ic-off">📷</span>
+      </button>
+      <button class="call-round-btn" id="flipCamBtn" title="Сменить камеру">🔄</button>
+      <button class="call-round-btn hangup" id="hangupBtn" title="Завершить">📵</button>
+    </div>
+  </div>
+</div>
+
+<!-- Полноэкранный входящий звонок -->
+<div class="call-screen incoming-screen hidden" id="incomingCall">
+  <div class="call-bg-blur incoming-pulse"></div>
+  <div class="call-screen-top">
+    <div class="call-avatar-big pulsing" id="incomingAvatarBig"></div>
+    <div class="call-peer" id="incomingPeerName"></div>
+    <div class="call-status" id="incomingText">Входящий звонок…</div>
+  </div>
+  <div class="call-screen-bottom">
+    <div class="incoming-actions-row">
+      <div class="incoming-action-col">
+        <button class="call-round-btn decline" id="declineCallBtn">📵</button>
+        <span>Отклонить</span>
+      </div>
+      <div class="incoming-action-col">
+        <button class="call-round-btn accept" id="acceptCallBtn">📞</button>
+        <span>Принять</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Полноэкранный групповой звонок -->
+<div class="call-screen group-call-screen hidden" id="groupCallOverlay">
+  <div class="call-screen-top group-call-top">
+    <div class="call-peer" id="groupCallTitle">Групповой звонок</div>
+    <div class="call-status" id="groupCallStatus"></div>
+    <button class="icon-btn" id="groupCallShareBtn" title="Поделиться звонком">🔗</button>
+  </div>
+  <div class="group-call-grid" id="groupCallGrid"></div>
+  <div class="call-screen-bottom">
+    <div class="call-controls">
+      <button class="call-round-btn" id="groupToggleMicBtn" title="Микрофон">
+        <span class="ic-on">🎙</span><span class="ic-off">🔇</span>
+      </button>
+      <button class="call-round-btn" id="groupToggleCamBtn" title="Камера">
+        <span class="ic-on">🎥</span><span class="ic-off">📷</span>
+      </button>
+      <button class="call-round-btn" id="groupFlipCamBtn" title="Сменить камеру">🔄</button>
+      <button class="call-round-btn hangup" id="groupHangupBtn" title="Покинуть звонок">📵</button>
+    </div>
+  </div>
+</div>
+
+<!-- Кружок: запись — полноэкранный оверлей в духе нативного экрана записи
+     видео (отмена и таймер сверху, лок записи справа сверху, круглый
+     превью с тонким кольцом прогресса по центру, переключение камеры и
+     вспышка слева снизу, кнопка-шаттер справа снизу). -->
+<div class="circle-record-overlay hidden" id="circleRecordModal">
+  <div class="circle-record-top">
+    <button type="button" class="circle-record-cancel" id="circleRecordCancelBtn">‹ Отменить</button>
+    <div class="circle-record-timer"><span class="circle-record-dot"></span><span id="circleRecordElapsed">00:00,00</span></div>
+    <button type="button" class="circle-record-lock" id="circleRecordLockBtn" title="Закрепить запись">
+      <span class="ic-unlocked">🔓</span><span class="ic-locked">🔒</span>
+    </button>
+  </div>
+  <div class="circle-record-stage-wrap">
+    <div class="circle-record-stage">
+      <video id="circlePreview" autoplay playsinline muted></video>
+      <svg class="circle-record-progress" viewBox="0 0 100 100">
+        <circle class="circle-record-progress-track" cx="50" cy="50" r="48"></circle>
+        <circle class="circle-record-progress-bar" cx="50" cy="50" r="48"></circle>
+      </svg>
+    </div>
+  </div>
+  <div class="circle-record-bottom">
+    <div class="circle-record-tools">
+      <button type="button" class="circle-record-tool" id="circleFlipBtn" title="Сменить камеру">🔄</button>
+      <button type="button" class="circle-record-tool" id="circleFlashBtn" title="Вспышка">⚡</button>
+    </div>
+    <button type="button" class="circle-record-shutter" id="circleShutterBtn" title="Остановить и отправить">
+      <span class="circle-record-shutter-ring"></span>
+      <span class="circle-record-shutter-core"></span>
+    </button>
+  </div>
+</div>
+
+<!-- Контекстное меню чата (по удержанию) — закрепить/открепить -->
+<div class="context-menu-backdrop hidden" id="convContextBackdrop"></div>
+<div class="context-menu hidden" id="convContextMenu"></div>
+
+<!-- Контекстное меню сообщения (по удержанию): реакции + изменить/удалить, с размытием фона -->
+<div class="msg-context-overlay hidden" id="msgContextOverlay">
+  <div class="msg-context-clone-wrap" id="msgContextCloneWrap"></div>
+  <div class="msg-context-menu" id="msgContextMenu">
+    <div class="msg-context-reactions" id="msgContextReactions"></div>
+    <div class="msg-context-actions" id="msgContextActions"></div>
+  </div>
+</div>
+
+<!-- Реакции: панель выбора -->
+<div class="reaction-picker hidden" id="reactionPicker"></div>
+
+<!-- Модалка создания/редактирования одной папки -->
+<div class="modal hidden" id="folderEditModal">
+  <div class="modal-card">
+    <div class="modal-title">Папка <button class="modal-close" data-close="folderEditModal">✕</button></div>
+    <input type="text" id="folderNameInput" placeholder="Название папки">
+    <div class="modal-subtitle">Чаты в папке</div>
+    <div id="folderConvChecklist" class="modal-list"></div>
+    <button class="btn-primary" id="saveFolderBtn">Сохранить</button>
+    <button class="btn-danger hidden" id="deleteFolderBtn">Удалить папку</button>
+  </div>
+</div>
+
+<!-- Админ: редактирование пользователя -->
+<div class="modal hidden" id="adminEditUserModal">
+  <div class="modal-card">
+    <div class="modal-title">Редактировать пользователя <button class="modal-close" data-close="adminEditUserModal">✕</button></div>
+    <div class="settings-avatar-row">
+      <div class="my-avatar big" id="adminEditAvatarPreview"></div>
+      <input type="file" id="adminAvatarInput" accept="image/*" class="hidden">
+      <button class="btn-secondary" id="adminChangeAvatarBtn">Изменить фото</button>
+    </div>
+    <input type="text" id="adminEditDisplayName" placeholder="Отображаемое имя">
+    <input type="text" id="adminEditUsername" placeholder="Логин">
+    <input type="text" id="adminEditStatus" placeholder="Статус">
+    <input type="password" id="adminEditPassword" placeholder="Новый пароль (оставить пустым — не менять)">
+    <div class="settings-error" id="adminEditError"></div>
+    <button class="btn-primary" id="adminSaveUserBtn">Сохранить</button>
+  </div>
+</div>
+
+<!-- Админ: просмотр чата -->
+<div class="modal hidden admin-modal" id="adminChatViewModal">
+  <div class="modal-card admin-card">
+    <div class="modal-title"><span id="adminChatViewTitle">Чат</span> <button class="modal-close" data-close="adminChatViewModal">✕</button></div>
+    <div id="adminChatMessages" class="admin-chat-messages"></div>
+  </div>
+</div>
+
+<!-- Мини-приложение бота: модалка-шторка, выезжает снизу на всю ширину -->
+<div class="modal miniapp-modal hidden" id="miniAppModal">
+  <div class="miniapp-sheet">
+    <div class="miniapp-sheet-handle"></div>
+    <div class="miniapp-sheet-header">
+      <div class="miniapp-sheet-title">
+        <img src="/assets/miniapp-icon.png" alt="">
+        <span id="miniAppTitle">Мини-приложение</span>
+      </div>
+      <button class="modal-close" id="miniAppCloseBtn" data-close="miniAppModal">✕</button>
+    </div>
+    <iframe id="miniAppFrame" class="miniapp-frame" title="Мини-приложение"></iframe>
+  </div>
+</div>
+
+<!-- SVG-фильтры для liquid-тумблеров (см. .liquid-toggle в style.css и
+     public/liquid-toggle.js) — дословно перенесены из
+     cross-browser-liquid-toggle-drag-tap (jh3y, CodePen), включая id.
+     ВАЖНО: stdDeviation/alpha ниже прописаны СРАЗУ как рабочие значения
+     (0.5 и 20 — см. CONFIG в liquid-toggle.js), а не как исходные авторские
+     13/13/-10. Раньше здесь лежали именно авторские 13/13/-10 (рассчитанные
+     на toggle 140×60px из демо), а правильные значения накатывались поверх уже
+     ПОСЛЕ загрузки, через `gsap.set('#goo ...', ...)` в applyGlobalConfig().
+     Пока GSAP (грузится с esm.sh) не выполнится — а на части десктопных
+     браузеров/сетей это может занять заметное время или не отработать
+     вовсе (блокировщики, оффлайн-кэш и т.п.) — тумблер рендерился с
+     13-кратно завышенным блюром goo-фильтра относительно его реального
+     размера 70×30px, из-за чего белый "жидкий" индикатор в состоянии покоя
+     выглядел раздутым/больше положенного (при активном перетаскивании
+     разница была не так заметна — сам индикатор в этот момент и так
+     увеличивается по дизайну через scale). GSAP по-прежнему выставляет те
+     же значения на #goo при инициализации — это теперь просто no-op, если
+     скрипт успел загрузиться, и больше не единственный источник правды на
+     случай, если не успел. Фильтр #knockout в самом CSS никем не
+     используется (в оригинале он тоже висел неиспользуемым) — оставлен для
+     полноты 1:1. -->
+<svg class="sr-only" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="goo">
+      <feGaussianBlur result="lt1" in="SourceGraphic" stdDeviation="0.5"></feGaussianBlur>
+      <feColorMatrix result="lt2" in="lt1" values="
+          1 0 0 0 0
+          0 1 0 0 0
+          0 0 1 0 0
+          0 0 0 20 -10
+      " type="matrix"></feColorMatrix>
+      <feComposite result="lt3" in="lt2" operator="atop"></feComposite>
+
+    </filter>
+    <filter id="knockout" colorInterpolationFilters="sRGB">
+      <feColorMatrix result="knocked" type="matrix" values="1 0 0 0 0
+                    0 1 0 0 0
+                    0 0 1 0 0
+                    -1 -1 -1 1 0" />
+      <feComponentTransfer>
+        <feFuncR type="linear" slope="3" intercept="-1" />
+        <feFuncG type="linear" slope="3" intercept="-1" />
+        <feFuncB type="linear" slope="3" intercept="-1" />
+      </feComponentTransfer>
+      <feComponentTransfer>
+        <feFuncR type="table" tableValues="0 0 0 0 0 1 1 1 1 1" />
+        <feFuncG type="table" tableValues="0 0 0 0 0 1 1 1 1 1" />
+        <feFuncB type="table" tableValues="0 0 0 0 0 1 1 1 1 1" />
+      </feComponentTransfer>
+    </filter>
+    <filter id="remove-black" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="1 0 0 0 0
+                    0 1 0 0 0
+                    0 0 1 0 0
+                    -255 -255 -255 0 1" result="black-pixels" />
+      <feMorphology in="black-pixels" operator="dilate" radius="0.5" result="smoothed" />
+      <feComposite in="SourceGraphic" in2="smoothed" operator="out" />
+    </filter>
+  </defs>
+</svg>
+
+<script src="/qrcode.js"></script>
+<script src="/i18n.js"></script>
+<script src="/app.js"></script>
+<script type="module" src="/liquid-toggle.js"></script>
+
+</body>
+</html>
