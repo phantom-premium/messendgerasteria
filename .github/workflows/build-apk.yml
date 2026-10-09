@@ -1,0 +1,55 @@
+name: Build release APK
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: asteria-android
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Android SDK уже установлен на ubuntu-latest (ANDROID_HOME), поэтому
+      # android-actions/setup-android не нужен: именно он падал с
+      # "Failed to find package 'tools'" (пакета 'tools' в новых
+      # cmdline-tools больше нет).
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      # Если ключа подписи нет в репозитории — создаём тот же, что описан в
+      # app/build.gradle (alias asteria, пароль asteria123). Если ключ уже
+      # лежит в репозитории, он остаётся как есть.
+      - name: Ensure release keystore exists
+        run: |
+          if [ ! -f app/keystore/asteria-release.keystore ]; then
+            mkdir -p app/keystore
+            keytool -genkeypair -v \
+              -keystore app/keystore/asteria-release.keystore \
+              -storepass asteria123 -keypass asteria123 \
+              -alias asteria -keyalg RSA -keysize 2048 -validity 36500 \
+              -dname "CN=Asteria, OU=Asteria, O=Asteria, C=RU"
+          fi
+
+      # В проекте нет gradlew / gradle-wrapper.jar (так задумано, см. README),
+      # поэтому ставим Gradle той же версии, что указана в
+      # gradle/wrapper/gradle-wrapper.properties.
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Build release APK
+        run: gradle assembleRelease --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: asteria-release-apk
+          path: asteria-android/app/build/outputs/apk/release/*.apk
