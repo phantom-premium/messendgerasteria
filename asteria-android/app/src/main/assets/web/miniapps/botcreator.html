@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BotCreator</title>
+<style>
+  :root {
+    --bg: #0f1117; --card: #171a23; --card2: #1e222d; --border: #2a2e3a;
+    --text: #f2f3f7; --text-dim: #9aa0b0; --accent: #1c7fd6; --accent2: #3aa8ec;
+    --danger: #ef4444; --ok: #22c55e;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  body { padding: 14px 16px 28px; }
+  h1 { font-size: 17px; margin: 4px 0 14px; display: flex; align-items: center; gap: 8px; }
+  h1 img { width: 22px; height: 22px; }
+  .muted { color: var(--text-dim); font-size: 13px; line-height: 1.5; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 14px; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row + .row { margin-top: 10px; }
+  input[type=text], textarea {
+    width: 100%; background: var(--card2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 10px; padding: 10px 12px; font-size: 14px; font-family: inherit; outline: none;
+  }
+  input[type=text]:focus, textarea:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 54px; }
+  label.field { display: block; font-size: 12px; color: var(--text-dim); margin: 10px 0 4px; }
+  .btn { border: none; border-radius: 10px; padding: 10px 14px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .btn-primary { background: linear-gradient(135deg, var(--accent2), var(--accent)); color: #fff; width: 100%; }
+  .btn-secondary { background: var(--card2); color: var(--text); border: 1px solid var(--border); }
+  .btn-danger { background: rgba(239,68,68,.12); color: var(--danger); border: 1px solid rgba(239,68,68,.35); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .bots-list { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+  .bot-chip {
+    flex: 0 0 auto; padding: 8px 14px; border-radius: 999px; background: var(--card2);
+    border: 1px solid var(--border); font-size: 13px; white-space: nowrap; cursor: pointer;
+  }
+  .bot-chip.active { background: linear-gradient(135deg, var(--accent2), var(--accent)); border-color: transparent; color: #fff; font-weight: 600; }
+  .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .switch { position: relative; width: 44px; height: 26px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch .track {
+    position: absolute; inset: 0; background: var(--border); border-radius: 999px; transition: background .15s; cursor: pointer;
+  }
+  .switch .track::after {
+    content: ''; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px; background: #fff;
+    border-radius: 50%; transition: transform .15s;
+  }
+  .switch input:checked + .track { background: var(--ok); }
+  .switch input:checked + .track::after { transform: translateX(18px); }
+  .cmd-item { background: var(--card2); border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin-top: 8px; }
+  .cmd-item .cmd-trigger { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+  .cmd-item .cmd-response { font-size: 13px; color: var(--text-dim); white-space: pre-wrap; }
+  .cmd-item .cmd-actions { margin-top: 8px; display: flex; justify-content: flex-end; }
+  .cmd-item .cmd-actions button { background: transparent; border: none; color: var(--danger); font-size: 12px; cursor: pointer; }
+  .section-title { font-size: 13px; font-weight: 700; margin: 0 0 8px; }
+  .error { color: var(--danger); font-size: 13px; margin-top: 8px; min-height: 16px; }
+  .ok-msg { color: var(--ok); font-size: 13px; margin-top: 8px; min-height: 16px; }
+  .empty { text-align: center; color: var(--text-dim); font-size: 13px; padding: 18px 0; }
+  code { background: var(--card2); padding: 1px 5px; border-radius: 5px; font-size: 12px; }
+</style>
+</head>
+<body>
+  <h1><img src="/assets/miniapp-icon.png" alt="">BotCreator</h1>
+  <p class="muted">Создавайте ботов, настраивайте команды и подключайте им собственные мини-приложения — переключателем и ссылкой, прямо здесь.</p>
+
+  <div class="card">
+    <div class="section-title">Мои боты</div>
+    <div id="botsList" class="bots-list"><div class="empty">Загрузка…</div></div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Создать нового бота</div>
+    <label class="field">Имя бота</label>
+    <input type="text" id="newBotName" placeholder="Например: Мой магазин">
+    <label class="field">Логин (латиницей, заканчивается на «bot»)</label>
+    <input type="text" id="newBotUsername" placeholder="my_shop_bot">
+    <button class="btn btn-primary" id="createBotBtn" style="margin-top:10px;">Создать бота</button>
+    <div class="error" id="createError"></div>
+  </div>
+
+  <div id="botEditor" style="display:none;">
+    <div class="card">
+      <div class="section-title">Мини-приложение <span id="editorBotName" class="muted"></span></div>
+      <div class="switch-row">
+        <div>
+          <div>Включить мини-приложение</div>
+          <div class="muted">Кнопка со значком появится у поля ввода в чате с ботом</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="miniAppToggle">
+          <span class="track"></span>
+        </label>
+      </div>
+      <label class="field">Ссылка на мини-приложение</label>
+      <input type="text" id="miniAppUrl" placeholder="https://example.com/my-app">
+      <button class="btn btn-primary" id="saveMiniAppBtn" style="margin-top:10px;">Сохранить</button>
+      <div class="ok-msg" id="miniAppSaved"></div>
+      <div class="error" id="miniAppError"></div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Команды бота</div>
+      <p class="muted">Когда пользователь отправит боту точное сообщение из поля «Команда», бот ответит текстом из поля «Ответ».</p>
+      <label class="field">Команда</label>
+      <input type="text" id="cmdTrigger" placeholder="/price или просто слово">
+      <label class="field">Ответ</label>
+      <textarea id="cmdResponse" placeholder="Текст ответа бота"></textarea>
+      <button class="btn btn-secondary" id="addCmdBtn" style="margin-top:10px;">+ Добавить команду</button>
+      <div id="cmdList"></div>
+      <button class="btn btn-primary" id="saveCmdBtn" style="margin-top:14px;">Сохранить команды</button>
+      <div class="ok-msg" id="cmdSaved"></div>
+    </div>
+
+    <div class="card">
+      <button class="btn btn-danger" id="deleteBotBtn" style="width:100%;">Удалить бота</button>
+    </div>
+  </div>
+
+<script>
+  let bots = [];
+  let activeBotId = null;
+  let draftCommands = [];
+
+  async function api(path, opts) {
+    const res = await fetch(path, Object.assign({ credentials: 'include', headers: { 'Content-Type': 'application/json' } }, opts || {}));
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Ошибка запроса');
+    return data;
+  }
+
+  async function loadBots() {
+    const data = await api('/api/bots/mine');
+    bots = data.bots || [];
+    renderBotsList();
+    if (bots.length && !activeBotId) selectBot(bots[0].id);
+    if (!bots.length) document.getElementById('botEditor').style.display = 'none';
+  }
+
+  function renderBotsList() {
+    const el = document.getElementById('botsList');
+    if (!bots.length) {
+      el.innerHTML = '<div class="empty">У вас пока нет ботов — создайте первого ниже 👇</div>';
+      return;
+    }
+    el.innerHTML = bots.map((b) =>
+      `<div class="bot-chip ${b.id === activeBotId ? 'active' : ''}" data-id="${b.id}">@${escapeHtml(b.username)}</div>`
+    ).join('');
+    el.querySelectorAll('.bot-chip').forEach((chip) => {
+      chip.addEventListener('click', () => selectBot(chip.dataset.id));
+    });
+  }
+
+  function selectBot(id) {
+    activeBotId = id;
+    const bot = bots.find((b) => b.id === id);
+    if (!bot) return;
+    renderBotsList();
+    document.getElementById('botEditor').style.display = 'block';
+    document.getElementById('editorBotName').textContent = '· @' + bot.username;
+    document.getElementById('miniAppToggle').checked = !!(bot.miniApp && bot.miniApp.enabled);
+    document.getElementById('miniAppUrl').value = (bot.miniApp && bot.miniApp.url) || '';
+    draftCommands = (bot.commands || []).slice();
+    renderCommands();
+    document.getElementById('miniAppSaved').textContent = '';
+    document.getElementById('miniAppError').textContent = '';
+    document.getElementById('cmdSaved').textContent = '';
+  }
+
+  function renderCommands() {
+    const el = document.getElementById('cmdList');
+    if (!draftCommands.length) {
+      el.innerHTML = '';
+      return;
+    }
+    el.innerHTML = draftCommands.map((c, i) =>
+      `<div class="cmd-item">
+        <div class="cmd-trigger">${escapeHtml(c.trigger)}</div>
+        <div class="cmd-response">${escapeHtml(c.response)}</div>
+        <div class="cmd-actions"><button data-i="${i}">Удалить</button></div>
+      </div>`
+    ).join('');
+    el.querySelectorAll('.cmd-actions button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        draftCommands.splice(Number(btn.dataset.i), 1);
+        renderCommands();
+      });
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s || '').replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+  }
+
+  document.getElementById('createBotBtn').addEventListener('click', async () => {
+    const name = document.getElementById('newBotName').value.trim();
+    const username = document.getElementById('newBotUsername').value.trim();
+    const errEl = document.getElementById('createError');
+    errEl.textContent = '';
+    if (!name || !username) { errEl.textContent = 'Заполните оба поля'; return; }
+    try {
+      const data = await api('/api/bots', { method: 'POST', body: JSON.stringify({ name, username }) });
+      document.getElementById('newBotName').value = '';
+      document.getElementById('newBotUsername').value = '';
+      await loadBots();
+      selectBot(data.bot.id);
+    } catch (e) { errEl.textContent = e.message; }
+  });
+
+  document.getElementById('saveMiniAppBtn').addEventListener('click', async () => {
+    if (!activeBotId) return;
+    let enabled = document.getElementById('miniAppToggle').checked;
+    const url = document.getElementById('miniAppUrl').value.trim();
+    const errEl = document.getElementById('miniAppError');
+    const okEl = document.getElementById('miniAppSaved');
+    errEl.textContent = ''; okEl.textContent = '';
+    // Если ссылку вставили, но забыли включить переключатель — включаем сами,
+    // раз пользователь явно указал ссылку, значит хочет её использовать.
+    if (url && !enabled) {
+      enabled = true;
+      document.getElementById('miniAppToggle').checked = true;
+    }
+    try {
+      const data = await api('/api/bots/' + activeBotId, { method: 'PATCH', body: JSON.stringify({ miniApp: { enabled, url } }) });
+      bots = bots.map((b) => (b.id === activeBotId ? data.bot : b));
+      document.getElementById('miniAppUrl').value = (data.bot.miniApp && data.bot.miniApp.url) || '';
+      document.getElementById('miniAppToggle').checked = !!(data.bot.miniApp && data.bot.miniApp.enabled);
+      okEl.textContent = 'Сохранено ✓';
+    } catch (e) { errEl.textContent = e.message; }
+  });
+
+  document.getElementById('addCmdBtn').addEventListener('click', () => {
+    const trigger = document.getElementById('cmdTrigger').value.trim();
+    const response = document.getElementById('cmdResponse').value.trim();
+    const okEl = document.getElementById('cmdSaved');
+    if (!trigger || !response) {
+      okEl.style.color = '';
+      okEl.className = 'error';
+      okEl.textContent = 'Заполните оба поля — и «Команда», и «Ответ»';
+      return;
+    }
+    draftCommands.push({ trigger, response });
+    document.getElementById('cmdTrigger').value = '';
+    document.getElementById('cmdResponse').value = '';
+    okEl.className = 'ok-msg';
+    okEl.textContent = '';
+    renderCommands();
+  });
+
+  document.getElementById('saveCmdBtn').addEventListener('click', async () => {
+    if (!activeBotId) return;
+    const okEl = document.getElementById('cmdSaved');
+    okEl.className = 'ok-msg';
+    okEl.textContent = '';
+    // Если пользователь заполнил поля «Команда»/«Ответ», но забыл нажать
+    // «+ Добавить команду» перед сохранением — не теряем ввод, а добавляем
+    // пару автоматически.
+    const pendingTrigger = document.getElementById('cmdTrigger').value.trim();
+    const pendingResponse = document.getElementById('cmdResponse').value.trim();
+    if (pendingTrigger && pendingResponse) {
+      draftCommands.push({ trigger: pendingTrigger, response: pendingResponse });
+      document.getElementById('cmdTrigger').value = '';
+      document.getElementById('cmdResponse').value = '';
+      renderCommands();
+    }
+    try {
+      const data = await api('/api/bots/' + activeBotId, { method: 'PATCH', body: JSON.stringify({ commands: draftCommands }) });
+      bots = bots.map((b) => (b.id === activeBotId ? data.bot : b));
+      draftCommands = data.bot.commands || [];
+      renderCommands();
+      okEl.textContent = 'Сохранено ✓';
+    } catch (e) { okEl.className = 'error'; okEl.textContent = e.message; }
+  });
+
+  document.getElementById('deleteBotBtn').addEventListener('click', async () => {
+    if (!activeBotId) return;
+    if (!confirm('Удалить этого бота безвозвратно?')) return;
+    try {
+      await api('/api/bots/' + activeBotId, { method: 'DELETE' });
+      activeBotId = null;
+      await loadBots();
+    } catch (e) { alert(e.message); }
+  });
+
+  loadBots().catch((e) => {
+    document.getElementById('botsList').innerHTML = '<div class="empty">' + escapeHtml(e.message) + '</div>';
+  });
+</script>
+</body>
+</html>
